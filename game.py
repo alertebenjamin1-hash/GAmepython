@@ -54,101 +54,58 @@ class Game:
         
         self.team = team
     
-    def play(self):
-        """Lance la boucle de combat"""
-        from utils import clear_screen, print_header, get_valid_input
+    def lancer_le_jeu(self):
+        # On récupère les monstres simplement
+        liste_monstres = list(self.db['monsters'].find())
         
-        clear_screen()
-        print_header(f"Combat - {self.player_name}")
-        
-        while True:
-            monster = self.get_random_monster()
-            monster['current_hp'] = monster['hp']
+        # Tant qu'on a au moins un perso vivant dans l'équipe
+        while len(self.team) > 0:
+            self.waves = self.waves + 1 # On avance d'une vague
             
-            clear_screen()
-            print_header(f"Vague {self.waves + 1}")
-            print(f"Un {monster['name']} apparaît!")
-            print(f"PV: {monster['current_hp']}, ATK: {monster['attack']}, DEF: {monster['defense']}\n")
+            # On pioche un monstre au pif
+            monstre_actuel = random.choice(liste_monstres).copy()
+            pv_monstre = monstre_actuel['hp']
             
-            input("Appuyez sur Entrée pour combattre...")
-            
-            defeated = self.fight(monster)
-            
-            if defeated:
-                print(f"\nVous avez survécu {self.waves} vagues!")
-                self.save_score()
-                return
+            print(f"\n--- VAGUE {self.waves} ---")
+            print(f"Vous affrontez : {monstre_actuel['name']} (PV: {pv_monstre})")
+
+            # La bagarre continue tant que le monstre et l'équipe sont en vie
+            while pv_monstre > 0 and len(self.team) > 0:
+                input("\nAppuyez sur Entrée pour attaquer...")
+
+                # 1. CHAQUE PERSO DE L'EQUIPE ATTAQUE
+                for perso in self.team:
+                    if pv_monstre > 0:
+                        # Calcul tout simple : Attaque moins Defense
+                        degats = perso['attack'] - monstre_actuel['defense']
+                        if degats < 1: degats = 1 # On fait au moins 1 de dégât
+                        
+                        pv_monstre = pv_monstre - degats
+                        print(f"{perso['name']} tape le monstre ! Il reste {pv_monstre} PV au monstre.")
+
+                # 2. LE MONSTRE REPOND (s'il est encore vivant)
+                if pv_monstre > 0:
+                    # Il choisit quelqu'un au hasard dans l'équipe
+                    cible = random.choice(self.team)
+                    degats_monstre = monstre_actuel['attack'] - cible['defense']
+                    if degats_monstre < 1: degats_monstre = 1
+                    
+                    cible['hp'] = cible['hp'] - degats_monstre
+                    print(f"Le monstre attaque {cible['name']} ! Il lui reste {cible['hp']} PV.")
+
+                    # Si le perso meurt, on l'enlève de la liste
+                    if cible['hp'] <= 0:
+                        print(f"DOMMAGE : {cible['name']} est mort...")
+                        self.team.remove(cible)
+
+            if pv_monstre <= 0:
+                print("Bien joué ! Monstre mort.")
             else:
-                self.waves += 1
-                input("\nVictoire! Appuyez sur Entrée pour la prochaine vague...")
-    
-    def fight(self, monster):
-        """Gère un combat complet"""
-        from utils import clear_screen
-        
-        while True:
-            clear_screen()
-            print(f"=== Combat Vague {self.waves + 1} ===\n")
-            
-            print("Votre équipe:")
-            for char in self.team:
-                print(f"  {char['name']} - PV: {char['current_hp']}/{char['hp']}")
-            
-            print(f"\n{monster['name']} - PV: {monster['current_hp']}/{monster['hp']}\n")
-            
-            # Les personnages attaquent
-            for char in self.team:
-                damage = self.calculate_damage(char['attack'], monster['defense'])
-                monster['current_hp'] -= damage
-                print(f"{char['name']} attaque! Dégâts: {damage}")
-            
-            if monster['current_hp'] <= 0:
-                print(f"\n{monster['name']} est vaincu!")
-                return False
-            
-            input("\nAppuyez sur Entrée...")
-            clear_screen()
-            print(f"=== Combat Vague {self.waves + 1} ===\n")
-            print("Votre équipe:")
-            for char in self.team:
-                print(f"  {char['name']} - PV: {char['current_hp']}/{char['hp']}")
-            print(f"\n{monster['name']} - PV: {monster['current_hp']}/{monster['hp']}\n")
-            
-            # Le monstre attaque
-            target = random.choice(self.team)
-            damage = self.calculate_damage(monster['attack'], target['defense'])
-            target['current_hp'] -= damage
-            print(f"{monster['name']} attaque {target['name']}! Dégâts: {damage}")
-            
-            if all(char['current_hp'] <= 0 for char in self.team):
-                print("\nVotre équipe est vaincue!")
-                return True
-            
-            input("\nAppuyez sur Entrée...")
-    
-    def calculate_damage(self, attack, defense):
-        """Calcule les dégâts"""
-        damage = attack - defense
-        if damage < 1:
-            damage = 1
-        variation = random.randint(-2, 2)
-        damage = max(1, damage + variation)
-        return damage
-    
-    def get_random_monster(self):
-        """Retourne un monstre aléatoire"""
-        return random.choice(MONSTERS).copy()
-    
-    def save_score(self):
-        """Sauvegarde le score"""
-        scores = self.db['scores']
-        
-        scores.insert_one({
-            'player_name': self.player_name,
-            'waves': self.waves
+                print("GAME OVER... Vous avez perdu.")
+
+        # Quand c'est fini, on enregistre le score
+        self.db['scores'].insert_one({
+            'nom': self.player_name,
+            'vagues': self.waves - 1
         })
-        
-        all_scores = list(scores.find().sort('waves', -1))
-        if len(all_scores) > 3:
-            ids_to_delete = [score['_id'] for score in all_scores[3:]]
-            scores.delete_many({'_id': {'$in': ids_to_delete}})
+        print(f"Score enregistré : {self.waves - 1} vagues.")
