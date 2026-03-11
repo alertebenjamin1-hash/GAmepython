@@ -2,19 +2,19 @@ import os
 
 
 def clear_screen():
-    """Efface l'écran"""
+    # Efface la console 
     os.system('cls' if os.name == 'nt' else 'clear')
 
 
 def print_header(text):
-    """Affiche un titre formaté"""
+    # ça c'est pour que ke jeu soit archi lisible 
     print("\n" + "=" * 50)
     print(text.center(50))
     print("=" * 50 + "\n")
 
 
 def get_valid_input(prompt, input_type=str, min_val=None, max_val=None):
-    """Récupère une entrée valide de l'utilisateur"""
+    # cette fonction fore l'utilisateur à donner un truc correct 
     while True:
         try:
             user_input = input(prompt)
@@ -34,7 +34,7 @@ def get_valid_input(prompt, input_type=str, min_val=None, max_val=None):
                     continue
                 return user_input.strip()
         except ValueError:
-            print("Entrée invalide. Veuillez réessayer.")
+            print("C'est pas un nombre valide, reessaye tete de bite.")
 
 
 def ask_player_name():

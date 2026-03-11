@@ -1,66 +1,73 @@
-import os
 from pymongo import MongoClient
-from game import Game
-# On importe les outils dont on a besoin depuis utils.py
-from utils import clear_screen, print_header, get_valid_input
+from db_init import db
+from models import Combattant
+from game import lancer_combat
 
-def main():
-   # 1. L'adresse de ta base de données (l'URI)
-    URI = "mongodb+srv://alertebenjamin1_db_user:Mongo123456@cluster0.riwg8o7.mongodb.net/?appName=Cluster0"
+
+def afficher_classement():
+    print("\n---Top 3 SCORES ---")
+    #on trie par vagues decroissantes (-1) et on limite aux 3 premiers
+    scores = list(db.scores.find().sort("vagues", -1).limit(3))
     
-    # 2. Création du client MongoDB
-    client = MongoClient(URI)
+    if not scores:
+        print("Aucun score pour le moment. Soyez le premier !")
+    else:
+        for i, s in enumerate(scores, 1):
+            print(f"{i}. {s['joueur']} - {s['vagues']} vagues")
 
-     # Sélection de la base de données
-    db = client['jeu_combat_db']
-     # Cette boucle permet d'afficher le menu tant que le joueur
-    while True:
-        clear_screen()
-        print_header("MENU PRINCIPAL - JEU DE COMBAT")
-        print("1. Démarrer une nouvelle partie")
-        print("2. Voir les meilleurs scores")
-        print("3. Quitter")
-        
-        choix = input("\nfaite un choix (1, 2 ou 3) : ")
 
-        # Le joueur saisit son nom, crée son équipe,
-        # puis le combat infini peut commencer.
+def jouer():
+    nom_joueur = input("Ton nom de guerrier : ")
 
-        if choix == "1":
-            clear_screen()
-            print_header("NOUVELLE PARTIE")
+    #recuperer les persos de la db
+    persos_db = list(db.personnages.find())
+    print("\nChoisissez 3 personnages :")
+    # On affiche la liste avec les stats pour que le joueur puisse choisir
+    for i, p in enumerate(persos_db):
+        print(f"{i}- {p['name']} (ATK:{p['attack']} DEF:{p['defense']} PV:{p['hp']})")
 
-            # Saisie du nom du joueur
-            nom = input("Entrez votre nom de guerrier : ")
-            
-            # On crée l'objet Game avec la base de données et le nom
-            mon_jeu = Game(db, nom)
-            
-            # Choisir les persos
-            mon_jeu.create_team()
-            
-            # Lancer le jeu
-            mon_jeu.lancer_le_jeu()
-            
-            input("\nPartie terminée ! Appuyez sur Entrée pour revenir au menu...")
-            # AFFICHER LE CLASSEMENT
-        elif choix == "2":
-            clear_screen()
-            print_header("MEILLEURS SCORES")
-            # On va chercher les 3 meilleurs dans la base
-            scores = list(db['scores'].find().sort('vagues', -1).limit(3))
-            
-            for s in scores:
-                print(f"- {s['nom']} : {s['vagues']} vagues survécues")
-            
-            input("\nAppuyez sur Entrée pour quitter...")
-       
-        # Fin propre du programme.
+    equipe = []
+    indices_choisis = []
 
-        elif choix == "3":
-            print("Merci d'avoir joué ! À bientôt.")
-            break
-       
-# C'est ce qui lance tout le programme
+    # Boucle pour s'assurer que le joueur prend exactement 3 persos différents
+    while len(equipe) < 3:
+        try:
+            choix = int(input(f"Numéro du perso {len(equipe)+1} : "))
+            if choix not in indices_choisis and 0 <= choix < len(persos_db):
+                p = persos_db[choix]
+                equipe.append(Combattant(p['name'], p['attack'], p['defense'], p['hp']))
+                indices_choisis.append(choix)
+            else:
+                print("Choix invalide ou déjà pris.")
+        except ValueError:
+            print("Entre un chiffre !")
+
+    # On récupère la liste des monstres pour le combat
+    monstres_db = list(db.monstres.find())
+
+    # On lance le combat infini et on récupère le nombre de vagues atteint
+    score_final = lancer_combat(equipe, monstres_db)
+
+    # Sauvegarder
+    db.scores.insert_one({"joueur": nom_joueur, "vagues": score_final})
+    print(f"\nPartie finie ! Tu as survécu à {score_final} vagues.")
+    afficher_classement()
+
+# Menu Principal
 if __name__ == "__main__":
-    main()
+    while True:
+        print("\n=== MENU JEU VIDEO ===")
+        print("1. Jouer")
+        print("2. Voir le classement")
+        print("3. Quitter")
+        choix = input("Votre choix : ")
+
+        if choix == "1": 
+            jouer()
+        elif choix == "2": 
+            afficher_classement()
+        elif choix == "3": 
+            break
+
+        else:
+            print("Choix non reconnu, reessayer.")
